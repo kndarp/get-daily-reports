@@ -5,8 +5,8 @@ const cheerio = require('cheerio');
 const request = require('request');
 const fs = require('fs');
 const https = require('https');
-const zlib = require('zlib');
-
+const unzip = require('unzip');
+const paths = require('../config/paths.js');
 const urlParams = {
   types : {
     eq  : "eqbhav",
@@ -28,36 +28,39 @@ var nseAxios = axios.create({
 router.get('/', function(req, res, next) {
   axios.get('http://localhost:3000/nse/eq/20-03-2017')
     .then(function (resp) {
-      console.log(resp.data);
-    //   var options = {
-    //     hostname: 'www.nseindia.com',
-    //     path: '/content/historical/EQUITIES/2017/MAR/cm20MAR2017bhav.csv.zip',
-    //     method: 'GET',
-    //     headers: {
-    //       "cache-control": "no-cache",
-    //       "Connection": "keep-alive",
-    //       "accept": '*/*',
-    //       // "Accept": "text/html,application/xhtml+xml,application/xml;q=0.9,image/webp,*/*;q=0.8",
-    //       "User-Agent": "Mozilla/5.0 (Windows NT 10.0; WOW64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/56.0.2924.87 Safari/537.36",
-    //       "Accept-Encoding": "gzip, deflate, sdch, br"
-    //
-    //     }
-    //   };
-    //
-    // // var requestSent =   https.request(options,function (data) {
-    // //     zlib.unzip(data,
-    // //              {finishFlush: zlib.constants.Z_SYNC_FLUSH},
-    // //              (err, buffer) => {
-    // //     if (!err) {
-    // //       buffer.pipe(fs.createWriteStream('file.csv'));
-    // //     } else {
-    // //       // handle error
-    // //       console.error(err);
-    // //     }
-    // //   });
-    // //     // data.pipe(fs.createWriteStream('file.zip'));
-    // //   });
-    // //   requestSent.end();
+      // console.log(resp.data);
+      var options = {
+        hostname: 'www.nseindia.com',
+        path: '/content/historical/EQUITIES/2017/MAR/cm20MAR2017bhav.csv.zip',
+        method: 'GET',
+        headers: {
+          "cache-control": "no-cache",
+          "Connection": "keep-alive",
+          "accept": '*/*',
+          // "Accept": "text/html,application/xhtml+xml,application/xml;q=0.9,image/webp,*/*;q=0.8",
+          "User-Agent": "Mozilla/5.0 (Windows NT 10.0; WOW64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/56.0.2924.87 Safari/537.36",
+          "Accept-Encoding": "gzip, deflate, sdch, br"
+
+        }
+      };
+    // var syncFlush = constants.Z_SYNC_FLUSH;
+    var requestSent =   https.request(options,function (data) {
+
+      var contentType = data.headers['content-type'];
+      // console.log(contentType);
+      if(data.headers['content-type'].includes('zip')){
+        // console.log("unzipping; i'm tripping");
+        data.pipe(unzip.Parse())
+          .on('entry', function (entry) {
+            var fileName = entry.path;
+            var type = entry.type; // 'Directory' or 'File'
+            var size = entry.size;
+            entry.pipe(fs.createWriteStream(entry.path));
+          });
+          // data.pipe(fs.createWriteStream('file.zip'));
+        }
+      });
+      requestSent.end();
     })
     .catch(function (err) {
       console.error(err);
@@ -69,7 +72,10 @@ router.get('/', function(req, res, next) {
 router.get('/:section/:date', function(req, res, next) {
   var section = req.params.section;
   var date = req.params.date;
+  var path = paths.nse[section];
   var url =  `/ArchieveSearch?h_filetype=${urlParams.types[section]}&date=${date}&section=${urlParams.sections[section]}`;
+
+
 
   nseAxios.get(url)
     .then(function (response) {
@@ -95,8 +101,26 @@ router.get('/:section/:date', function(req, res, next) {
       };
 
       var requestSent =   https.request(options,function (data) {
-        data.pipe(fs.createWriteStream(fileName));
-      })
+
+        if (!fs.existsSync(path)){
+          fs.mkdirSync(path);
+        }
+
+        if(data.headers['content-type'].includes('zip')){
+          // console.log("unzipping; i'm tripping");
+          data.pipe(unzip.Parse())
+            .on('entry', function (entry) {
+              var fileName = entry.path;
+              var type = entry.type; // 'Directory' or 'File'
+              var size = entry.size;
+              entry.pipe(fs.createWriteStream(path+entry.path));
+            });
+          }else{
+            data.pipe(fs.createWriteStream(path+fileName));
+          }
+        });
+        // data.pipe(fs.createWriteStream(fileName));
+      // })
       requestSent.end();
 
     })
