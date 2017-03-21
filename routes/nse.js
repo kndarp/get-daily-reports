@@ -2,6 +2,11 @@ var express = require('express');
 var router = express.Router();
 const axios = require('axios');
 const cheerio = require('cheerio');
+const request = require('request');
+const fs = require('fs');
+const https = require('https');
+const zlib = require('zlib');
+
 const urlParams = {
   types : {
     eq  : "eqbhav",
@@ -13,17 +18,51 @@ const urlParams = {
     fo  : "FO",
     ind : "IND"
   }
-
 }
 
 var nseAxios = axios.create({
-  baseURL: 'https://www.nseindia.com',
-  timeout: 1000,
-  headers: {'X-Custom-Header': 'foobar'}
+  baseURL: 'https://www.nseindia.com'
 });
+
 /* GET users listing. */
 router.get('/', function(req, res, next) {
-  res.send('respond with a resource');
+  axios.get('http://localhost:3000/nse/eq/20-03-2017')
+    .then(function (resp) {
+      console.log(resp.data);
+    //   var options = {
+    //     hostname: 'www.nseindia.com',
+    //     path: '/content/historical/EQUITIES/2017/MAR/cm20MAR2017bhav.csv.zip',
+    //     method: 'GET',
+    //     headers: {
+    //       "cache-control": "no-cache",
+    //       "Connection": "keep-alive",
+    //       "accept": '*/*',
+    //       // "Accept": "text/html,application/xhtml+xml,application/xml;q=0.9,image/webp,*/*;q=0.8",
+    //       "User-Agent": "Mozilla/5.0 (Windows NT 10.0; WOW64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/56.0.2924.87 Safari/537.36",
+    //       "Accept-Encoding": "gzip, deflate, sdch, br"
+    //
+    //     }
+    //   };
+    //
+    // // var requestSent =   https.request(options,function (data) {
+    // //     zlib.unzip(data,
+    // //              {finishFlush: zlib.constants.Z_SYNC_FLUSH},
+    // //              (err, buffer) => {
+    // //     if (!err) {
+    // //       buffer.pipe(fs.createWriteStream('file.csv'));
+    // //     } else {
+    // //       // handle error
+    // //       console.error(err);
+    // //     }
+    // //   });
+    // //     // data.pipe(fs.createWriteStream('file.zip'));
+    // //   });
+    // //   requestSent.end();
+    })
+    .catch(function (err) {
+      console.error(err);
+    })
+    res.send("done");
 });
 
 // Equity reports
@@ -37,12 +76,34 @@ router.get('/:section/:date', function(req, res, next) {
       var htmlData = response.data;
       $ = cheerio.load(htmlData);
       var downloadRelativeLink = $('a').attr('href');
-      var absoluteLink = `https://www.nseindia.com${downloadRelativeLink}`;
-      res.send(absoluteLink);
+      var fileName = $('a').text();
+      // var absoluteLink = `https://www.nseindia.com${downloadRelativeLink}`;
+      // res.send(absoluteLink);
+      var options = {
+        hostname: 'www.nseindia.com',
+        path: downloadRelativeLink,
+        method: 'GET',
+        headers: {
+          "cache-control": "no-cache",
+          "Connection": "keep-alive",
+          "accept": '*/*',
+          // "Accept": "text/html,application/xhtml+xml,application/xml;q=0.9,image/webp,*/*;q=0.8",
+          "User-Agent": "Mozilla/5.0 (Windows NT 10.0; WOW64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/56.0.2924.87 Safari/537.36",
+          "Accept-Encoding": "gzip, deflate, sdch, br"
+
+        }
+      };
+
+      var requestSent =   https.request(options,function (data) {
+        data.pipe(fs.createWriteStream(fileName));
+      })
+      requestSent.end();
+
     })
     .catch(function (error) {
       console.error("ERROR@nse.js:router.get(/:section/:date) - "+error);
     });
+    res.send("File Downloaded");
 });
 
 module.exports = router;
